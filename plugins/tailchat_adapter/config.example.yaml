@@ -1,0 +1,28 @@
+tailchat:
+  host: "https://tailchat.msgbyte.com"
+  app_id: "YOUR_APP_ID"
+  app_secret: "YOUR_APP_SECRET"
+  # bot_user_id: "YOUR_BOT_USER_ID"
+  # openapi_base: "/api/openapi"
+  # login_path: "/bot/login"
+  # send_message_path: "/bot/sendMessage"
+  # file_url_path: "/bot/file"
+
+server:
+  listen_host: "0.0.0.0"
+  listen_port: 8088
+  callback_path: "/tailchat/callback"
+
+security:
+  callback_token: "CHANGE_ME"
+  allow_ips: []
+  enable_body_hash: false
+
+features:
+  require_mention: true
+  attachment_mode: "url_only"
+  download_dir: "./data/tailchat_downloads"
+  max_attachment_mb: 50
+
+mapping:
+  session_key_template: "{groupId}:{converseId}"
