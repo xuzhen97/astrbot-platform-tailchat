@@ -1,0 +1,7 @@
+id: "astrbot-platform-tailchat"
+name: "AstrBot Platform Tailchat"
+version: "0.2.0"
+entry: "tailchat_adapter:plugin_entry"
+description: "Tailchat OpenApp Bot platform adapter for AstrBot"
+author: "xuzhen97"
+license: "MIT"
