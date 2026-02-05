@@ -7,6 +7,7 @@ from typing import Any, Optional
 import httpx
 
 from .types import ReplyInfo
+from .utils import get_first
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class TailchatAPI:
         response = self._client.post(self._build_url(self.login_path), json=payload)
         response.raise_for_status()
         data = response.json()
-        token_value = self._get_first(data, ["data.token", "data.jwt", "token", "jwt"])
+        token_value = get_first(data, ["data.token", "data.jwt", "token", "jwt"])
         if not token_value:
             raise RuntimeError(f"Unable to parse login token: {data}")
         self._token = token_value
@@ -76,7 +77,7 @@ class TailchatAPI:
         except Exception:
             LOGGER.exception("Failed to resolve file url for %s", file_id)
             return None
-        return self._get_first(data, ["data.url", "url", "data.downloadUrl"])
+        return get_first(data, ["data.url", "url", "data.downloadUrl"])
 
     def download_file(self, url: str, max_bytes: int) -> bytes:
         with self._client.stream("GET", url) as response:
@@ -109,19 +110,5 @@ class TailchatAPI:
     def _build_url(self, path: str) -> str:
         return f"{self.host}{self.openapi_base}{path}"
 
-    @staticmethod
-    def _get_first(data: dict[str, Any], paths: list[str]) -> Any:
-        for path in paths:
-            current: Any = data
-            valid = True
-            for part in path.split("."):
-                if isinstance(current, dict) and part in current:
-                    current = current[part]
-                else:
-                    valid = False
-                    break
-            if valid and current not in (None, ""):
-                return current
-            if valid:
-                return current
-        return None
+    def close(self) -> None:
+        self._client.close()

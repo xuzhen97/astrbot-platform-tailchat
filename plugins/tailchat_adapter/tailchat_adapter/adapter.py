@@ -1,19 +1,22 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from .tailchat_api import TailchatAPI
 from .types import Attachment, IncomingMessage, ReplyInfo
+from .utils import get_first, get_first_with_presence, strip_mention_text, write_redacted_payload
 
 LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
 class TailchatAdapterConfig:
+    bot_key: str
     host: str
     app_id: str
     app_secret: str
@@ -35,7 +38,7 @@ class TailchatPlatformAdapter:
     def __init__(
         self,
         config: TailchatAdapterConfig,
-        event_callback: Optional[Callable[[IncomingMessage], None]] = None,
+        event_callback: Optional[Callable[[IncomingMessage], Optional[Awaitable[object]]]] = None,
     ) -> None:
         self.config = config
         self.event_callback = event_callback
@@ -55,13 +58,17 @@ class TailchatPlatformAdapter:
             message = self.convert_message(payload)
         except Exception:
             LOGGER.exception("[%s] Failed to convert payload", request_id)
+            write_redacted_payload(payload, request_id)
             return
 
         if message is None:
             return
 
+        message.metadata["request_id"] = request_id
         if self.event_callback:
-            self.event_callback(message)
+            result = self.event_callback(message)
+            if asyncio.iscoroutine(result):
+                await result
         else:
             LOGGER.info(
                 "[%s] Incoming message (no handler). group=%s converse=%s sender=%s text_len=%s attachments=%s",
@@ -74,24 +81,24 @@ class TailchatPlatformAdapter:
             )
 
     def convert_message(self, payload: dict[str, Any]) -> Optional[IncomingMessage]:
-        event_type = self._get_first(payload, ["type", "eventType", "data.type"]) or ""
+        event_type = get_first(payload, ["type", "eventType", "data.type"]) or ""
         if str(event_type).lower() not in {"message", "message.created", "message.create"}:
             return None
 
-        group_id = self._get_first(payload, ["groupId", "group_id", "data.groupId"])
-        converse_id = self._get_first(payload, ["converseId", "converse_id", "data.converseId"])
+        group_id = get_first(payload, ["groupId", "group_id", "data.groupId"])
+        converse_id = get_first(payload, ["converseId", "converse_id", "data.converseId"])
         if not group_id or not converse_id:
             LOGGER.warning("Missing groupId or converseId in payload")
             return None
 
-        message_id = self._get_first(payload, ["messageId", "_id", "data.messageId"])
-        sender = self._get_first(payload, ["author", "sender", "data.author"], default={})
-        sender_id = self._get_first(sender, ["_id", "id", "userId"]) if isinstance(sender, dict) else None
-        sender_name = self._get_first(sender, ["nickname", "name", "username"]) if isinstance(sender, dict) else None
-        content = self._get_first(payload, ["content", "text", "data.content"], default="")
+        message_id = get_first(payload, ["messageId", "_id", "data.messageId"])
+        sender = get_first(payload, ["author", "sender", "data.author"], default={})
+        sender_id = get_first(sender, ["_id", "id", "userId"]) if isinstance(sender, dict) else None
+        sender_name = get_first(sender, ["nickname", "name", "username"]) if isinstance(sender, dict) else None
+        content = get_first(payload, ["content", "text", "data.content"], default="")
         mentions, mentions_present = self._extract_mentions(payload)
 
-        if self.config.require_mention and mentions_present:
+        if self.config.require_mention:
             if self.config.bot_user_id and self.config.bot_user_id not in mentions:
                 return None
             if not self.config.bot_user_id and not mentions:
@@ -101,11 +108,19 @@ class TailchatPlatformAdapter:
         reply = self._extract_reply(payload)
 
         session_key = self.config.session_key_template.format(
-            groupId=group_id, converseId=converse_id, messageId=message_id or ""
+            groupId=group_id,
+            converseId=converse_id,
+            messageId=message_id or "",
+            botKey=self.config.bot_key,
         )
 
+        clean_text = strip_mention_text(str(content or ""))
+        attachment_summary = [
+            {"name": item.name, "file_id": item.file_id, "url": item.url} for item in attachments
+        ]
+
         message = IncomingMessage(
-            text=str(content or ""),
+            text=clean_text,
             attachments=attachments,
             sender_id=sender_id,
             sender_name=sender_name,
@@ -115,7 +130,12 @@ class TailchatPlatformAdapter:
             session_key=session_key,
             mentions=mentions,
             reply=reply,
-            metadata={"raw": payload},
+            metadata={
+                "bot_key": self.config.bot_key,
+                "event_type": event_type,
+                "mentions_present": mentions_present,
+                "attachments": attachment_summary,
+            },
         )
 
         if self.config.attachment_mode == "download":
@@ -160,7 +180,7 @@ class TailchatPlatformAdapter:
             message.metadata.setdefault("downloaded_files", []).append(file_path)
 
     def _extract_mentions(self, payload: dict[str, Any]) -> tuple[list[str], bool]:
-        mentions_value, present = self._get_first_with_presence(
+        mentions_value, present = get_first_with_presence(
             payload,
             ["mentions", "meta.mentions", "data.meta.mentions"],
         )
@@ -173,13 +193,17 @@ class TailchatPlatformAdapter:
                 if isinstance(item, str):
                     mentions.append(item)
                 elif isinstance(item, dict):
-                    mention_id = self._get_first(item, ["_id", "id", "userId"])
+                    mention_id = get_first(item, ["_id", "id", "userId"])
                     if mention_id:
                         mentions.append(str(mention_id))
         return mentions, present
 
     def _extract_attachments(self, payload: dict[str, Any]) -> list[Attachment]:
-        attachments_value = self._get_first(payload, ["files", "attachments", "meta.files", "data.meta.files"], default=[])
+        attachments_value = get_first(
+            payload,
+            ["files", "attachments", "meta.files", "data.meta.files"],
+            default=[],
+        )
         attachments: list[Attachment] = []
         if not attachments_value:
             return attachments
@@ -187,13 +211,13 @@ class TailchatPlatformAdapter:
         for item in attachments_value:
             if not isinstance(item, dict):
                 continue
-            url = self._get_first(item, ["url", "src", "downloadUrl"])
-            file_id = self._get_first(item, ["fileId", "file_id", "_id"])
+            url = get_first(item, ["url", "src", "downloadUrl"])
+            file_id = get_first(item, ["fileId", "file_id", "_id"])
             attachments.append(
                 Attachment(
-                    name=str(self._get_first(item, ["name", "filename"], default="")),
-                    mime=self._get_first(item, ["mime", "mimetype", "type"]),
-                    size_bytes=self._get_first(item, ["size", "sizeBytes", "length"]),
+                    name=str(get_first(item, ["name", "filename"], default="")),
+                    mime=get_first(item, ["mime", "mimetype", "type"]),
+                    size_bytes=get_first(item, ["size", "sizeBytes", "length"]),
                     url=url,
                     file_id=file_id,
                 )
@@ -201,33 +225,15 @@ class TailchatPlatformAdapter:
         return attachments
 
     def _extract_reply(self, payload: dict[str, Any]) -> Optional[ReplyInfo]:
-        reply = self._get_first(payload, ["reply", "meta.reply", "data.meta.reply"], default=None)
+        reply = get_first(payload, ["reply", "meta.reply", "data.meta.reply"], default=None)
         if not isinstance(reply, dict):
             return None
         author = reply.get("author") if isinstance(reply.get("author"), dict) else {}
         return ReplyInfo(
-            message_id=self._get_first(reply, ["messageId", "_id"]),
-            author_id=self._get_first(author, ["_id", "id", "userId"]),
-            author_name=self._get_first(author, ["nickname", "name"]).strip() if self._get_first(author, ["nickname", "name"], default="") else None,
-            content=self._get_first(reply, ["content", "text"]),
+            message_id=get_first(reply, ["messageId", "_id"]),
+            author_id=get_first(author, ["_id", "id", "userId"]),
+            author_name=get_first(author, ["nickname", "name"]).strip()
+            if get_first(author, ["nickname", "name"], default="")
+            else None,
+            content=get_first(reply, ["content", "text"]),
         )
-
-    def _get_first(self, data: Any, paths: list[str], default: Any = None) -> Any:
-        value, found = self._get_first_with_presence(data, paths)
-        return value if found else default
-
-    def _get_first_with_presence(self, data: Any, paths: list[str]) -> tuple[Any, bool]:
-        for path in paths:
-            current = data
-            valid = True
-            for part in path.split("."):
-                if isinstance(current, dict) and part in current:
-                    current = current[part]
-                else:
-                    valid = False
-                    break
-            if valid and current not in (None, ""):
-                return current, True
-            if valid:
-                return current, True
-        return None, False
