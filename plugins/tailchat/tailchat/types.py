@@ -30,7 +30,7 @@ class IncomingMessage:
     group_id: Optional[str] = None
     converse_id: Optional[str] = None
     message_id: Optional[str] = None
-    session_key: Optional[str] = None
     mentions: list[str] = field(default_factory=list)
+    session_key: Optional[str] = None
     reply: Optional[ReplyInfo] = None
     metadata: dict[str, Any] = field(default_factory=dict)
