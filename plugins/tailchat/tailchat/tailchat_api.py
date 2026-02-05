@@ -11,6 +11,9 @@ from .utils import get_first
 
 LOGGER = logging.getLogger(__name__)
 
+LOGIN_PATH = "/api/openapi/bot/login"
+SEND_MESSAGE_PATH = "/api/chat/message/sendMessage"
+
 
 class TailchatAPI:
     def __init__(
@@ -18,16 +21,14 @@ class TailchatAPI:
         host: str,
         app_id: str,
         app_secret: str,
-        openapi_base: str = "/api/openapi",
-        login_path: str = "/bot/login",
-        send_message_path: str = "/bot/sendMessage",
-        file_url_path: str = "/bot/file",
-        upload_path: str = "/bot/upload",
+        login_path: str = LOGIN_PATH,
+        send_message_path: str = SEND_MESSAGE_PATH,
+        file_url_path: str = "/api/openapi/bot/file",
+        upload_path: str = "/api/openapi/bot/upload",
     ) -> None:
         self.host = host.rstrip("/")
         self.app_id = app_id
         self.app_secret = app_secret
-        self.openapi_base = openapi_base.rstrip("/")
         self.login_path = login_path
         self.send_message_path = send_message_path
         self.file_url_path = file_url_path
@@ -62,7 +63,7 @@ class TailchatAPI:
         if reply and reply.message_id:
             payload["meta"] = {
                 "reply": {
-                    "messageId": reply.message_id,
+                    "_id": reply.message_id,
                     "author": reply.author_id,
                     "content": reply.content,
                 }
@@ -108,7 +109,9 @@ class TailchatAPI:
         return response.json()
 
     def _build_url(self, path: str) -> str:
-        return f"{self.host}{self.openapi_base}{path}"
+        if not path.startswith("/"):
+            path = "/" + path
+        return f"{self.host}{path}"
 
     def close(self) -> None:
         self._client.close()
