@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
+import yaml
 from astrbot import logger
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -15,7 +17,7 @@ from astrbot.api.platform import (
 from astrbot.api.message_components import Plain, Image
 from astrbot.api.event import MessageChain
 
-DEFAULT_CONFIG_TMPL = {
+DEFAULT_CONFIG_TMPL_FALLBACK: dict[str, Any] = {
     "tailchat": {
         "host": "https://tailchat.msgbyte.com",
         "app_id": "YOUR_APP_ID",
@@ -36,6 +38,24 @@ DEFAULT_CONFIG_TMPL = {
         "download_dir": "./data/tailchat_downloads",
     },
 }
+
+
+def _load_default_config() -> dict[str, Any]:
+    config_path = Path(__file__).resolve().parent.parent / "config.example.yaml"
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return DEFAULT_CONFIG_TMPL_FALLBACK
+
+    data = yaml.safe_load(raw)
+    if isinstance(data, dict):
+        return data
+
+    logger.warning("[tailchat] default config template is not a mapping; using fallback")
+    return DEFAULT_CONFIG_TMPL_FALLBACK
+
+
+DEFAULT_CONFIG_TMPL = _load_default_config()
 
 from .api import TailchatAPI
 from .parse import parse_incoming
