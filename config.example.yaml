@@ -1,0 +1,18 @@
+tailchat:
+  host: "https://tailchat.msgbyte.com"
+  app_id: "YOUR_APP_ID"
+  app_secret: "YOUR_APP_SECRET"
+
+server:
+  listen_host: "0.0.0.0"
+  listen_port: 8088
+  callback_path: "/tailchat/callback"
+
+security:
+  callback_token: "CHANGE_ME"
+
+features:
+  require_mention: true
+  attachment_mode: "url_only"
+  max_attachment_mb: 50
+  download_dir: "./data/tailchat_downloads"
