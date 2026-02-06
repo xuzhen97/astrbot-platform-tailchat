@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any
+
+import yaml
 from astrbot import logger
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -38,7 +40,19 @@ DEFAULT_CONFIG_TMPL_FALLBACK: dict[str, Any] = {
 }
 
 
-DEFAULT_CONFIG_TMPL = DEFAULT_CONFIG_TMPL_FALLBACK
+def _load_default_config() -> dict[str, Any]:
+    config_path = Path(__file__).resolve().parents[1] / "config.example.yaml"
+    if config_path.exists():
+        try:
+            data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except Exception as exc:
+            logger.warning("[tailchat] failed to load %s: %s", config_path, exc)
+    return DEFAULT_CONFIG_TMPL_FALLBACK
+
+
+DEFAULT_CONFIG_TMPL = _load_default_config()
 
 from .api import TailchatAPI
 from .parse import parse_incoming
