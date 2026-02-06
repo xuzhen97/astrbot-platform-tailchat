@@ -1,0 +1,7 @@
+id: astrbot-platform-tailchat
+display_name: "AstrBot Platform – Tailchat"
+version: 0.2.0
+author: xuzhen97
+description: "Tailchat OpenApp Bot platform adapter for AstrBot (HTTP callback)."
+repository: "https://github.com/xuzhen97/astrbot-platform-tailchat"
+license: MIT
