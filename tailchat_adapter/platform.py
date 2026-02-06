@@ -15,6 +15,28 @@ from astrbot.api.platform import (
 from astrbot.api.message_components import Plain, Image
 from astrbot.api.event import MessageChain
 
+DEFAULT_CONFIG_TMPL = {
+    "tailchat": {
+        "host": "https://tailchat.msgbyte.com",
+        "app_id": "YOUR_APP_ID",
+        "app_secret": "YOUR_APP_SECRET",
+    },
+    "server": {
+        "listen_host": "0.0.0.0",
+        "listen_port": 8088,
+        "callback_path": "/tailchat/callback",
+    },
+    "security": {
+        "callback_token": "CHANGE_ME",
+    },
+    "features": {
+        "require_mention": True,
+        "attachment_mode": "url_only",
+        "max_attachment_mb": 50,
+        "download_dir": "./data/tailchat_downloads",
+    },
+}
+
 from .api import TailchatAPI
 from .parse import parse_incoming
 from .server import TailchatCallbackServer
@@ -25,7 +47,7 @@ from .event import TailchatAstrMessageEvent
 @register_platform_adapter(
     "tailchat",
     "Tailchat OpenApp Bot (HTTP callback)",
-    default_config_tmpl="config.example.yaml",
+    default_config_tmpl=DEFAULT_CONFIG_TMPL,
 )
 class TailchatPlatform(Platform):
     def __init__(
