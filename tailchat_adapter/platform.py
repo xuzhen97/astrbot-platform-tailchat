@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any
-
-import yaml
 from astrbot import logger
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -40,22 +38,7 @@ DEFAULT_CONFIG_TMPL_FALLBACK: dict[str, Any] = {
 }
 
 
-def _load_default_config() -> dict[str, Any]:
-    config_path = Path(__file__).resolve().parent.parent / "config.example.yaml"
-    try:
-        raw = config_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return DEFAULT_CONFIG_TMPL_FALLBACK
-
-    data = yaml.safe_load(raw)
-    if isinstance(data, dict):
-        return data
-
-    logger.warning("[tailchat] default config template is not a mapping; using fallback")
-    return DEFAULT_CONFIG_TMPL_FALLBACK
-
-
-DEFAULT_CONFIG_TMPL = _load_default_config()
+DEFAULT_CONFIG_TMPL = DEFAULT_CONFIG_TMPL_FALLBACK
 
 from .api import TailchatAPI
 from .parse import parse_incoming
